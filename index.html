@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Handwritten Math to LaTeX Converter</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #f4f4f9;
+        }
+        header {
+            background-color: #333;
+            color: white;
+            padding: 10px 20px;
+            text-align: center;
+        }
+        .container {
+            max-width: 800px;
+            margin: 20px auto;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+            padding: 20px;
+        }
+        canvas {
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            display: block;
+            margin: 0 auto;
+            cursor: crosshair;
+        }
+        .form-group {
+            margin-bottom: 15px;
+            text-align: center;
+        }
+        input[type="submit"], button {
+            display: inline-block;
+            padding: 10px 20px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            background-color: #333;
+            color: white;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        input[type="submit"]:hover, button:hover {
+            background-color: #555;
+        }
+        .output {
+            margin-top: 20px;
+            padding: 15px;
+            background: #f9f9f9;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        .button-container {
+            text-align: center;
+            margin-top: 15px;
+            margin-bottom: 20px;  /* Add space below the buttons */
+        }
+        .form-group.convert-button {
+            margin-top: 20px;  /* Add more space above the Convert button */
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>Handwritten Math to LaTeX Converter</h1>
+    </header>
+
+    <div class="container">
+        <div class="form-group">
+            <label for="drawingCanvas">Draw Your Equation:</label>
+            <canvas id="drawingCanvas" width="800" height="300"></canvas>
+        </div>
+
+        <div class="button-container">
+            <button id="clearButton">Clear</button>
+            <button id="undoButton">Undo</button>
+            <button id="redoButton">Redo</button>
+        </div>
+
+        <div class="form-group convert-button">
+            <input type="submit" id="convertButton" value="Convert to LaTeX">
+        </div>
+
+        <div id="output" class="output" style="display: none;">
+            <h3>LaTeX Code:</h3>
+            <pre id="latexCode"></pre>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('drawingCanvas');
+        const ctx = canvas.getContext('2d');
+        let isDrawing = false;
+        let paths = [];  // Stores drawing paths for undo/redo
+        let currentPath = -1; // Points to the current position in the path array
+
+        // Event listeners for drawing on the canvas
+        canvas.addEventListener('mousedown', (e) => {
+            isDrawing = true;
+            ctx.beginPath();
+            ctx.moveTo(e.offsetX, e.offsetY);
+        });
+
+        canvas.addEventListener('mousemove', (e) => {
+            if (isDrawing) {
+                ctx.lineTo(e.offsetX, e.offsetY);
+                ctx.stroke();
+            }
+        });
+
+        canvas.addEventListener('mouseup', () => {
+            if (isDrawing) {
+                paths = paths.slice(0, currentPath + 1); // Clear redo paths on new drawing
+                paths.push(ctx.getImageData(0, 0, canvas.width, canvas.height));
+                currentPath++;
+            }
+            isDrawing = false;
+        });
+
+        canvas.addEventListener('mouseout', () => {
+            isDrawing = false;
+        });
+
+        // Clear canvas
+        document.getElementById('clearButton').addEventListener('click', () => {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            paths = [];  // Clear history
+            currentPath = -1;
+        });
+
+        // Undo drawing
+        document.getElementById('undoButton').addEventListener('click', () => {
+            if (currentPath > 0) {
+                currentPath--;
+                ctx.putImageData(paths[currentPath], 0, 0);
+            }
+        });
+
+        // Redo drawing
+        document.getElementById('redoButton').addEventListener('click', () => {
+            if (currentPath < paths.length - 1) {
+                currentPath++;
+                ctx.putImageData(paths[currentPath], 0, 0);
+            }
+        });
+
+        // LaTeX conversion button
+        document.getElementById('convertButton').addEventListener('click', async () => {
+            const outputDiv = document.getElementById('output');
+            const latexCode = document.getElementById('latexCode');
+
+            // Convert the canvas drawing to Base64
+            const canvasImage = canvas.toDataURL('image/png').split(',')[1];
+
+            // Send the image to the backend
+            try {
+                const response = await fetch('http://localhost:5000/convert', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ image: canvasImage })
+                });
+
+                if (!response.ok) {
+                    throw new Error('Failed to convert the image');
+                }
+
+                const result = await response.json();
+                if (result.latex) {
+                    latexCode.textContent = result.latex;
+                } else {
+                    latexCode.textContent = 'Error: ' + result.error;
+                }
+                outputDiv.style.display = 'block';
+            } catch (error) {
+                latexCode.textContent = 'Error: ' + error.message;
+                outputDiv.style.display = 'block';
+            }
+        });
+    </script>
+</body>
+</html>
